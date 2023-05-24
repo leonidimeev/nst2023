@@ -1,0 +1,2 @@
+Проверить состояние бота
+https://api.telegram.org/bot6117316164:AAGHXlOeEL_Zyxgjm7SjnC5Fb0UYUd1qqdw/getWebhookInfo
