@@ -76,3 +76,43 @@ class EffectiveUser:
             self.name = user.name
             self.supports_inline_queries = user.supports_inline_queries
             self.username = user.username
+
+
+# Указатель чата
+class ChatPointer:
+    def __init__(self, user_id, chat_id):
+        self.user_id = user_id
+        self.chat_id = chat_id
+
+    @classmethod
+    def from_tuple(cls, tuple_data):
+        return cls(*tuple_data)
+
+
+# Чат
+class Chats:
+    def __init__(self, id, log_ids, user_id, name):
+        self.id = id
+        self.log_ids = log_ids
+        self.user_id = user_id
+        self.name = name
+
+    @classmethod
+    def from_tuple(cls, tuple_data):
+        id, log_ids, user_id, name = tuple_data
+        return cls(id, log_ids, user_id, name)
+
+
+# Логи
+class Logs:
+    def __init__(self, telegram_id, request, response, id, response_text):
+        self.telegram_id = telegram_id
+        self.request = request
+        self.response = response
+        self.id = id
+        self.response_text = response_text
+
+    @classmethod
+    def from_tuple(cls, tuple_data):
+        telegram_id, request, response, id, response_text = tuple_data
+        return cls(telegram_id, request, response, id, response_text)

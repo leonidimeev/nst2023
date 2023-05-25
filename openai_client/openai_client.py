@@ -18,5 +18,5 @@ def test(question):
     return response
 
 
-def turbo(question):
-    return openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[{"role": "user", "content": f"{question}"}])
+def turbo(messages):
+    return openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=messages)
