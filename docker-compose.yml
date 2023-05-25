@@ -1,0 +1,28 @@
+version: "3.9"
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 80:80
+    depends_on:
+      - db
+    environment:
+      - POSTGRES_HOST=nst2023
+      - POSTGRES_DB=logs
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=Qwerty123!
+
+  db:
+    image: postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=nst2023
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=Qwerty123!
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:
