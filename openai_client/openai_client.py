@@ -1,7 +1,7 @@
-import os
 import openai
+from telegram_bot.config import OPENAI_API_KEY
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
 
 def test(question):

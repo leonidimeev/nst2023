@@ -1,26 +1,28 @@
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-import os
-import configparser
 import classes
-import openai_client.client as openai_client
+import config
+import openai_client.openai_client as openai_client
+import database_client.database_client as database_client
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
-
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
-
-# Create a ConfigParser object and read the configuration file
-config = configparser.ConfigParser()
-config.read('config.ini')
-
-# Get the value of a configuration setting
-app_name = config.get('app', 'name')
-app_version = config.getfloat('app', 'version')
-app_debug = config.getboolean('app', 'debug')
 
 OPERATING_MODE = classes.OperatingMode(1)
 
+# Check database
+if not database_client.check_database():
+    exit()
+
 
 def start(update, context):
-    context.bot.send_message(chat_id=update.message.chat_id, text="Hello, I'm a NST2023 bot! Available commands: /mode")
+    global is_user_exists
+    this_user = classes.EffectiveUser(update.effective_user)
+    if not this_user.is_bot:
+        is_user_exists = database_client.is_user_exists(this_user.id)
+        if is_user_exists:
+            database_client.delete_user(this_user.id)
+        database_client.insert_user(this_user)
+    welcome_message = "С возращением" if is_user_exists else "Здравствуйте"
+    message = f"{welcome_message} {this_user.full_name}!, я NST2023 bot версии {config.app_version}!"
+    context.bot.send_message(chat_id=update.message.chat_id, text=message)
 
 
 def which_mode(update, context):
@@ -33,16 +35,14 @@ def operate(update, context):
 
 
 def get_answer(question: str, update, context):
-    print('started to precessing' + question)
-    # response = openai_client.test(question)
-    # context.bot.send_message(chat_id=update.message.chat_id, text=response['choices'][0]['message'])
-
+    print('started to processing' + question)
     response = openai_client.turbo(question)
     context.bot.send_message(chat_id=update.message.chat_id, text=response['choices'][0]['message']['content'])
+    database_client.insert_log(update.effective_user.id, question, response)
 
 
 def main():
-    updater = Updater(token=BOT_TOKEN, use_context=True)
+    updater = Updater(token=config.BOT_TOKEN, use_context=True)
 
     dp = updater.dispatcher
 
