@@ -20,3 +20,12 @@ database_settings = dict(config.items('database'))
 database_name = database_settings['database']
 database_host = database_settings['host']
 database_port = int(database_settings['port'])
+
+modules = dict(config.items('modules'))
+timetable_is_on = bool(modules['timetable'])
+
+# region timetable
+if timetable_is_on:
+    timetable_settings = dict(config.items('timetable'))
+    timetable_endpoint = timetable_settings['endpoint']
+# endregion

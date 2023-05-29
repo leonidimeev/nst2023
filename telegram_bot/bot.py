@@ -1,10 +1,11 @@
-from telegram import ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
+from telegram import ReplyKeyboardMarkup, ParseMode
+from telegram.ext import Updater, CommandHandler, MessageHandler, ConversationHandler, Filters
 
 import classes
 import config
 import database_client.database_client as database_client
 import openai_client.openai_client as openai_client
+import timetable_module.timetable_module as timetable_module
 
 OPERATING_MODE = classes.OperatingMode(1)
 
@@ -38,7 +39,7 @@ def detect_user(update, initial: bool):
 def generate_main_keyboard():
     # Create a list of available functions
     buttons = [
-        "Мои чаты", "Новый чат", "Мой профиль"
+        "Мои чаты", "Новый чат", "Мой профиль", "Мое расписание"
     ]
     return ReplyKeyboardMarkup([buttons], resize_keyboard=True)
 
@@ -53,6 +54,8 @@ def handle_function_command(update, context):
         new_chat(update, context, this_user)
     elif text == "Мой профиль":
         my_profile(update, context, this_user)
+    elif text == "Мое расписание":
+        my_timetable(update, context, this_user)
     else:
         operate(update, context, this_user)
 
@@ -84,11 +87,11 @@ def my_chats(update, context, this_user):
         this_user_chat_pointer = classes.ChatPointer.from_tuple(chat_pointer_raw)
         response_message = f"Ваши чаты, чтобы переключится, нажмите на айди:\n"
         chat_list_pointer = 1
-        for chat in chats:
-            if this_user_chat_pointer.chat_id == chat.id:
-                response_message += f"/chat_{chat_list_pointer}:chat{chat.id} ({chat.name})   (актуальный чат)  удалить? -> /delete_chat_{chat_list_pointer}\n"
+        for user_chat in chats:
+            if this_user_chat_pointer.chat_id == user_chat.id:
+                response_message += f"/chat_{chat_list_pointer}:chat{user_chat.id} ({user_chat.name})   (актуальный чат)  удалить? -> /delete_chat_{chat_list_pointer}\n"
             else:
-                response_message += f"/chat_{chat_list_pointer}:chat{chat.id} ({chat.name})  удалить? -> /delete_chat_{chat_list_pointer}\n "
+                response_message += f"/chat_{chat_list_pointer}:chat{user_chat.id} ({user_chat.name})  удалить? -> /delete_chat_{chat_list_pointer}\n "
             chat_list_pointer += 1
         # Send the message with the functions and buttons
         context.bot.send_message(chat_id=update.message.chat_id, text=response_message,
@@ -120,6 +123,30 @@ def my_profile(update, context, this_user):
 
     # Send the message with the functions and buttons
     context.bot.send_message(chat_id=update.message.chat_id, text=response_message, reply_markup=generate_main_keyboard())
+
+
+def my_timetable(update, context, this_user):
+    response_message = ""
+    user_groups_raw = database_client.get_user_groups(this_user.id)
+    user_groups = []
+    for group_raw in user_groups_raw:
+        user_groups.append(classes.UserGroups.from_tuple(group_raw))
+    timetables = {}
+    for user_group in user_groups:
+        timetables[user_group.group_name] = timetable_module.get_timetable(user_group.group_name)
+    for group_name, timetable in timetables.items():
+        response_message += f"Для группы <b>{group_name}</b>:\n"
+        for week_day, day_lessons_raw in timetable.items():
+            response_message += f"========================\n"
+            response_message += f"<b>{week_day}</b>\n"
+            for index, lessons_raw in enumerate(day_lessons_raw):
+                lesson = classes.Lesson.from_tuple(lessons_raw)
+                response_message += f"<b>{index + 1} {lesson.time}: {lesson.subject}</b>\n" \
+                                    f"{lesson.classroom} {lesson.teacher}\n" \
+                                    f"{lesson.additional_info}\n"
+
+    # Send the message with the functions and buttons
+    context.bot.send_message(chat_id=update.message.chat_id, text=response_message, reply_markup=generate_main_keyboard(), parse_mode=ParseMode.HTML)
 
 
 def new_chat(update, context, this_user):
