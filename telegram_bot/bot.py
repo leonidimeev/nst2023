@@ -1,10 +1,10 @@
-import classes
-import config
-import openai_client.openai_client as openai_client
-from telegram import KeyboardButton, ReplyKeyboardMarkup
-import database_client.database_client as database_client
+from telegram import ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
+import classes
+import config
+import database_client.database_client as database_client
+import openai_client.openai_client as openai_client
 
 OPERATING_MODE = classes.OperatingMode(1)
 
@@ -24,9 +24,9 @@ def detect_user(update, initial: bool):
             # Создание нового пользователя
             database_client.insert_user(this_user)
             # Создание нового чата
-            new_chat = database_client.create_chat(None, this_user.id, None)
+            created_chat = database_client.create_chat(None, this_user.id, None)
             # Создание нового указателя пользователя
-            database_client.create_chat_pointer(this_user.id, new_chat[0])
+            database_client.create_chat_pointer(this_user.id, created_chat[0])
     else:
         this_user = classes.EffectiveUser(update.effective_user)
     return this_user
@@ -48,7 +48,7 @@ def start(update, context):
     function_message = "Функции:\n=====================\n"
     context.bot.send_message(
         chat_id=update.message.chat_id,
-        text=message+function_message,
+        text=message + function_message,
         reply_markup=generate_main_keyboard())
 
 
@@ -56,55 +56,92 @@ def my_chats(update, context, this_user):
     chats = []
     for chats_raw in database_client.get_chats(user_id=this_user.id):
         chats.append(classes.Chats.from_tuple(chats_raw))
-    this_user_chat_pointer = classes.ChatPointer.from_tuple(database_client.get_chat_pointer(this_user.id))
-    response_message = f"Ваши чаты, чтобы переключится, нажмите на айди:\n"
-    for chat in chats:
-        if this_user_chat_pointer.chat_id == chat.id:
-            response_message += f"/chat_{chat.id}_{chat.name}   (актуальный чат)   удалить? -> /delete_chat_{chat.id}\n"
-        else:
-            response_message += f"/chat_{chat.id}_{chat.name}    удалить? -> /delete_chat_{chat.id}\n"
-    # Send the message with the functions and buttons
-    context.bot.send_message(chat_id=update.message.chat_id, text=response_message, reply_markup=generate_main_keyboard())
+    if len(chats) == 0:
+        context.bot.send_message(chat_id=update.message.chat_id, text="У вас нет ни одного созданного чата!",
+                                 reply_markup=generate_main_keyboard())
+    else:
+        chat_pointer_raw = database_client.get_chat_pointer(this_user.id)
+        if chat_pointer_raw is None:
+            database_client.create_chat_pointer(this_user.id, chats[0].id)
+            chat_pointer_raw = database_client.get_chat_pointer(this_user.id)
+        this_user_chat_pointer = classes.ChatPointer.from_tuple(chat_pointer_raw)
+        response_message = f"Ваши чаты, чтобы переключится, нажмите на айди:\n"
+        chat_list_pointer = 1
+        for chat in chats:
+            if this_user_chat_pointer.chat_id == chat.id:
+                response_message += f"/chat_{chat_list_pointer}:chat{chat.id} ({chat.name})   (актуальный чат)  удалить? -> /delete_chat_{chat_list_pointer}\n"
+            else:
+                response_message += f"/chat_{chat_list_pointer}:chat{chat.id} ({chat.name})  удалить? -> /delete_chat_{chat_list_pointer}\n "
+            chat_list_pointer += 1
+        # Send the message with the functions and buttons
+        context.bot.send_message(chat_id=update.message.chat_id, text=response_message,
+                                 reply_markup=generate_main_keyboard())
 
 
 def new_chat(update, context, this_user):
-    chat = classes.Chats.from_tuple(database_client.create_chat(None, this_user.id, []))
-    response_message = f"Создан новый чат: {chat.id}\n"
-    database_client.update_chat_pointer(this_user.id, chat.id)
-    context.bot.send_message(chat_id=update.message.chat_id, text=response_message, reply_markup=generate_main_keyboard())
+    this_user_chats = database_client.get_chats(this_user.id)
+    if len(this_user_chats) >= config.app_user_max_chats:
+        context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=f"Максимальное количество чатов для польователя: 5! Пользователь: {this_user.username} id: {this_user.id}")
+    else:
+        created_chat = classes.Chats.from_tuple(database_client.create_chat(None, this_user.id, []))
+        this_user_chat_pointer_raw = database_client.get_chat_pointer(this_user.id)
+        # Когда у пользователя нет chat_pointer
+        if this_user_chat_pointer_raw is None:
+            database_client.create_chat_pointer(this_user.id, created_chat.id)
+        else:
+            database_client.update_chat_pointer(this_user.id, created_chat.id)
+        context.bot.send_message(chat_id=update.message.chat_id, text=f"Создан новый чат: {created_chat.id}\n",
+                                 reply_markup=generate_main_keyboard())
 
 
 def operate(update, context, this_user):
     question = update.message.text
     print('started to processing' + question)
     # Указатель чата пользователя
-    chat_pointer = classes.ChatPointer.from_tuple(database_client.get_chat_pointer(this_user.id))
-    # Чат пользователя
-    chat = database_client.get_chat(chat_pointer.chat_id)
+    chat_pointer_raw = database_client.get_chat_pointer(this_user.id)
+    if chat_pointer_raw is None:
+        new_chat(update, context, this_user)
+        chat_pointer_raw = database_client.get_chat_pointer(this_user.id)
+    chat_pointer = classes.ChatPointer.from_tuple(chat_pointer_raw)
+    user_chat = classes.Chats.from_tuple(database_client.get_chat(chat_pointer.chat_id))
     chat_logs = []
-    for log_id in chat.log_ids:
+    for log_id in user_chat.log_ids:
         chat_logs.append(classes.Logs.from_tuple(database_client.get_log(log_id)))
     # Генерация промта с историей
     messages = [{"role": "system", "content": "You are a helpful assistant."}]
-    sorted_chat_logs = sorted(chat_logs, key=lambda log: log.id)
+    sorted_chat_logs = sorted(chat_logs, key=lambda chat_log: chat_log.id)
     for log in sorted_chat_logs:
         messages.append({"role": "user", "content": f"{log.request}"})
         messages.append({"role": "assistant", "content": f"{log.response_text}"})
     # Добавление вопроса
     messages.append({"role": "assistant", "content": f"{question}"})
     response = openai_client.turbo(messages)
-    context.bot.send_message(chat_id=update.message.chat_id, text=response['choices'][0]['message']['content'])
-    database_client.insert_log(update.effective_user.id, question, response)
+    response_text = response['choices'][0]['message']['content']
+    context.bot.send_message(chat_id=update.message.chat_id, text=response_text)
+
+    log = classes.Logs.from_tuple(database_client.insert_log(update.effective_user.id, question, response, response_text))
+    if user_chat.name is None:
+        splitted_question_text = log.response_text.split()
+        user_chat.name = ' '.join(splitted_question_text[:5])
+    user_chat.log_ids.append(log.id)
+    database_client.update_chat(user_chat.id, user_chat.name, this_user.id, user_chat.log_ids)
 
 
 def change_chat_pointer(update, context, user, chat_id):
-    this_chat = database_client.get_chat(chat_id)
+    this_chat = classes.Chats.from_tuple(database_client.get_chat(chat_id))
     if user.id != this_chat.user_id:
         permission_denied_message(update, context, user, f"переключение на чат. chat_id: {this_chat.id}")
+    else:
+        database_client.update_chat_pointer(user.id, chat_id)
+    context.bot.send_message(chat_id=update.message.chat_id, text=f"Переключено на чат:{chat_id}!")
 
 
 def permission_denied_message(update, context, user, message):
-    context.bot.send_message(chat_id=update.message.chat_id, text=f"Недостаточно прав для {message}. Пользователь: {user.username} id: {user.id}")
+    context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=f"Недостаточно прав для {message}. Пользователь: {user.username} id: {user.id}")
 
 
 def handle_function_command(update, context):
@@ -115,16 +152,80 @@ def handle_function_command(update, context):
         my_chats(update, context, this_user)
     elif text == "Новый чат":
         new_chat(update, context, this_user)
-    elif text.startswith('/'):
-        command = text.split('_')
-        # Команда переключения между чатами
-        if command[0] == 'chat' and len(command) == 3:
-            change_chat_pointer(update, context, this_user, command[1])
-        # Команда удаления чата
-        elif command[0] == 'delete' and command[1] == 'chat' and len(command) == 3:
-            delete_chat(command[2])
     else:
         operate(update, context, this_user)
+
+
+def chat(update, context):
+    this_user = classes.EffectiveUser(update.effective_user)
+    this_chat = classes.Chats.from_tuple(database_client.get_chat_by_order(this_user.id, 0))
+    change_chat_pointer(update, context, this_user, this_chat.id)
+
+
+# region chat_selector
+def select_chat(update, context, index):
+    this_user = classes.EffectiveUser(update.effective_user)
+    this_chat = classes.Chats.from_tuple(database_client.get_chat_by_order(this_user.id, index))
+    change_chat_pointer(update, context, this_user, this_chat.id)
+
+
+def chat_1(update, context):
+    select_chat(update, context, 1)
+
+
+def chat_2(update, context):
+    select_chat(update, context, 2)
+
+
+def chat_3(update, context):
+    select_chat(update, context, 3)
+
+
+def chat_4(update, context):
+    select_chat(update, context, 4)
+
+
+def chat_5(update, context):
+    select_chat(update, context, 5)
+# endregion
+
+
+# region chat_deleter
+def delete_chat(update, context, index):
+    this_user = classes.EffectiveUser(update.effective_user)
+    this_user_chats = database_client.get_chats(this_user.id)
+
+    if index < len(this_user_chats):
+        this_chat = classes.Chats.from_tuple(this_user_chats[index])
+        this_user_chat_pointer = classes.ChatPointer.from_tuple(database_client.get_chat_pointer(this_user.id))
+        database_client.delete_chat(this_chat.id)
+        context.bot.send_message(chat_id=update.message.chat_id, text=f"Удален чат:{this_chat.id}!")
+
+        if this_user_chat_pointer.chat_id == this_chat.id:
+            database_client.delete_chat_pointer(this_user.id, this_chat.id)
+
+
+def delete_chat_1(update, context):
+    delete_chat(update, context, 0)
+
+
+def delete_chat_2(update, context):
+    delete_chat(update, context, 1)
+
+
+def delete_chat_3(update, context):
+    delete_chat(update, context, 2)
+
+
+def delete_chat_4(update, context):
+    delete_chat(update, context, 3)
+
+
+def delete_chat_5(update, context):
+    delete_chat(update, context, 4)
+
+
+# endregion
 
 
 def main():
@@ -133,6 +234,21 @@ def main():
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("chat", chat))
+
+    # region chat_selector_and_deleter
+    dp.add_handler(CommandHandler("chat_1", chat_1))
+    dp.add_handler(CommandHandler("chat_2", chat_2))
+    dp.add_handler(CommandHandler("chat_3", chat_3))
+    dp.add_handler(CommandHandler("chat_4", chat_4))
+    dp.add_handler(CommandHandler("chat_5", chat_5))
+    dp.add_handler(CommandHandler("delete_chat_1", delete_chat_1))
+    dp.add_handler(CommandHandler("delete_chat_2", delete_chat_2))
+    dp.add_handler(CommandHandler("delete_chat_3", delete_chat_3))
+    dp.add_handler(CommandHandler("delete_chat_4", delete_chat_4))
+    dp.add_handler(CommandHandler("delete_chat_5", delete_chat_5))
+    # endregionn
+
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_function_command))
 
     updater.start_polling()

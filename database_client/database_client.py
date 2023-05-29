@@ -37,7 +37,7 @@ def check_database():
         return False
 
 
-#region Logs
+# region Logs
 def get_log(log_id):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
@@ -47,7 +47,7 @@ def get_log(log_id):
     cur = conn.cursor()
 
     # Execute SELECT statement to fetch the chat by chat_id
-    cur.execute("SELECT * FROM logs WHERE id = %s", (log_id))
+    cur.execute("SELECT * FROM logs WHERE id = %s", (log_id,))
     row = cur.fetchone()
 
     # Close database connection and cursor
@@ -57,7 +57,7 @@ def get_log(log_id):
     return row
 
 
-def insert_log(telegram_id, request, response):
+def insert_log(telegram_id, request, response, response_text):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD, host=database_host,
                             port=database_port)
@@ -66,8 +66,11 @@ def insert_log(telegram_id, request, response):
     cur = conn.cursor()
 
     # Execute INSERT statement with placeholders
-    cur.execute("INSERT INTO logs (telegram_id, request, response) VALUES (%s, %s, %s)",
-                (telegram_id, request, json.dumps(response)))
+    cur.execute("INSERT INTO logs (telegram_id, request, response, response_text) VALUES (%s, %s, %s, %s) RETURNING *",
+                (telegram_id, request, json.dumps(response), response_text))
+
+    # Fetch the inserted log
+    inserted_log = cur.fetchone()
 
     # Commit changes to the database
     conn.commit()
@@ -75,10 +78,14 @@ def insert_log(telegram_id, request, response):
     # Close database connection and cursor
     cur.close()
     conn.close()
-#endregion
+
+    return inserted_log
 
 
-#region Users
+# endregion
+
+
+# region Users
 def insert_user(user):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD, host=database_host,
@@ -140,10 +147,12 @@ def is_user_exists(user_id):
     conn.close()
 
     return result
-#endregion
 
 
-#region Chats
+# endregion
+
+
+# region Chats
 def create_chat(name, user_id, log_ids):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
@@ -228,6 +237,27 @@ def get_chats(user_id):
     return rows
 
 
+def get_chat_by_order(user_id, order):
+    # Connect to the PostgreSQL database
+    conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
+                            host=database_host, port=database_port)
+
+    # Open a cursor to perform database operations
+    cur = conn.cursor()
+
+    # Execute SELECT statement to fetch chats for the given user_id
+    cur.execute("SELECT * FROM chats WHERE user_id = %s", (user_id,))
+    rows = cur.fetchall()
+
+    response_row = rows[order - 1]
+
+    # Close database connection and cursor
+    cur.close()
+    conn.close()
+
+    return response_row
+
+
 def delete_chat(chat_id):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
@@ -245,10 +275,12 @@ def delete_chat(chat_id):
     # Close database connection and cursor
     cur.close()
     conn.close()
-#endregion
 
 
-#region ChatPointers
+# endregion
+
+
+# region ChatPointers
 def delete_chat_pointer(user_id, chat_id):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
@@ -258,7 +290,7 @@ def delete_chat_pointer(user_id, chat_id):
     cur = conn.cursor()
 
     # Execute DELETE statement with a WHERE clause to delete the chat pointer by user_id and chat_id
-    cur.execute("DELETE FROM chat_pointer WHERE user_id = %s AND chat_id = %s", (user_id, chat_id))
+    cur.execute("DELETE FROM chat_pointer WHERE user_id = %s and chat_id = %s", (user_id, chat_id))
 
     # Commit changes to the database
     conn.commit()
@@ -331,4 +363,4 @@ def create_chat_pointer(user_id, chat_id):
 
     # Return the inserted chat pointer
     return inserted_chat_pointer
-#endregion
+# endregion

@@ -14,6 +14,7 @@ app_settings = dict(config.items('app'))
 app_name = app_settings['name']
 app_version = float(app_settings['version'])
 app_debug = bool(app_settings['debug'])
+app_user_max_chats = int(app_settings['user_max_chats'])
 
 database_settings = dict(config.items('database'))
 database_name = database_settings['database']
