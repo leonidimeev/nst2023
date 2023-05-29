@@ -1,5 +1,5 @@
 from telegram import ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
 
 import classes
 import config
@@ -7,6 +7,9 @@ import database_client.database_client as database_client
 import openai_client.openai_client as openai_client
 
 OPERATING_MODE = classes.OperatingMode(1)
+
+# Определение стадий (шагов) диалога add_group
+ADD_GROUP_STEP_1 = 1
 
 # Check database
 if not database_client.check_database():
@@ -35,9 +38,23 @@ def detect_user(update, initial: bool):
 def generate_main_keyboard():
     # Create a list of available functions
     buttons = [
-        "Мои чаты", "Новый чат"
+        "Мои чаты", "Новый чат", "Мой профиль"
     ]
     return ReplyKeyboardMarkup([buttons], resize_keyboard=True)
+
+
+def handle_function_command(update, context):
+    text = update.effective_message.text
+    this_user = detect_user(update, initial=False)
+
+    if text == "Мои чаты":
+        my_chats(update, context, this_user)
+    elif text == "Новый чат":
+        new_chat(update, context, this_user)
+    elif text == "Мой профиль":
+        my_profile(update, context, this_user)
+    else:
+        operate(update, context, this_user)
 
 
 def start(update, context):
@@ -76,6 +93,33 @@ def my_chats(update, context, this_user):
         # Send the message with the functions and buttons
         context.bot.send_message(chat_id=update.message.chat_id, text=response_message,
                                  reply_markup=generate_main_keyboard())
+
+
+def my_profile(update, context, this_user):
+    response_message = ""
+    response_message += f"fullname: {this_user.full_name}\n"
+    response_message += f"username: {this_user.username}\n"
+    response_message += f"id: {this_user.id}\n"
+    response_message += f"is_bot: {this_user.is_bot}\n"
+    response_message += f"added_to_attachment_menu: {this_user.added_to_attachment_menu}\n"
+    response_message += f"can_join_groups: {this_user.can_join_groups}\n"
+    response_message += f"can_read_all_group_messages: {this_user.can_read_all_group_messages}\n"
+
+    number_of_chats = len(database_client.get_chats(this_user.id))
+    response_message += f"number_of_chats: {number_of_chats}\n"
+
+    user_groups = []
+    user_groups_raw = database_client.get_user_groups(this_user.id)
+    for group in user_groups_raw:
+        user_groups.append(classes.UserGroups.from_tuple(group))
+    response_message += f"user_groups:\n"
+    for user_group in user_groups:
+        response_message += f"- {user_group.group_name}\n"
+    response_message += f"/add_group  <- добавить группу\n"
+    response_message += f"/delete_groups  <- удалить все группы\n"
+
+    # Send the message with the functions and buttons
+    context.bot.send_message(chat_id=update.message.chat_id, text=response_message, reply_markup=generate_main_keyboard())
 
 
 def new_chat(update, context, this_user):
@@ -144,22 +188,31 @@ def permission_denied_message(update, context, user, message):
         text=f"Недостаточно прав для {message}. Пользователь: {user.username} id: {user.id}")
 
 
-def handle_function_command(update, context):
-    text = update.effective_message.text
-    this_user = detect_user(update, initial=False)
-
-    if text == "Мои чаты":
-        my_chats(update, context, this_user)
-    elif text == "Новый чат":
-        new_chat(update, context, this_user)
-    else:
-        operate(update, context, this_user)
-
-
 def chat(update, context):
     this_user = classes.EffectiveUser(update.effective_user)
     this_chat = classes.Chats.from_tuple(database_client.get_chat_by_order(this_user.id, 0))
     change_chat_pointer(update, context, this_user, this_chat.id)
+
+
+def add_group(update, context):
+    update.message.reply_text("Введите название группы (пример: ИМИ-М-НОД-21)")
+    return ADD_GROUP_STEP_1
+
+
+def add_group_handle_answer(update, context):
+    answer = update.message.text
+    this_user = classes.EffectiveUser(update.effective_user)
+    database_client.insert_user_group(this_user.id, answer)
+    update.message.reply_text(f"Добавлена группа: {answer}")
+    my_profile(update, context, this_user)
+    return ConversationHandler.END
+
+
+def delete_groups(update, context):
+    this_user = classes.EffectiveUser(update.effective_user)
+    database_client.delete_user_groups(this_user.id)
+    context.bot.send_message(chat_id=update.message.chat_id, text="Удалены все группы пользователя")
+    my_profile(update, context, this_user)
 
 
 # region chat_selector
@@ -235,6 +288,19 @@ def main():
 
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("chat", chat))
+
+    # region groups
+    # Создание и регистрация ConversationHandler для add_group
+    add_group_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('add_group', add_group)],
+        states={
+            ADD_GROUP_STEP_1: [MessageHandler(Filters.text, add_group_handle_answer)],
+        },
+        fallbacks=[],
+    )
+    dp.add_handler(add_group_conv_handler)
+    dp.add_handler(CommandHandler("delete_groups", delete_groups))
+    # endregion
 
     # region chat_selector_and_deleter
     dp.add_handler(CommandHandler("chat_1", chat_1))

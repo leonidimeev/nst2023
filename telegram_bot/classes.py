@@ -116,3 +116,15 @@ class Logs:
     def from_tuple(cls, tuple_data):
         telegram_id, request, response, id, response_text = tuple_data
         return cls(telegram_id, request, response, id, response_text)
+
+
+# Группы
+class UserGroups:
+    def __init__(self, user_id, group_name):
+        self.user_id = user_id
+        self.group_name = group_name
+
+    @classmethod
+    def from_tuple(cls, tuple_data):
+        user_id, group_name = tuple_data
+        return cls(user_id, group_name)

@@ -18,7 +18,8 @@ def check_database():
                       'first_name', 'full_name', 'is_bot', 'is_premium', 'language_code',
                       'last_name', 'link', 'name', 'supports_inline_queries', 'username'],
             'chats': ['id', 'name', 'user_id', 'log_ids'],
-            'chat_pointer': ['user_id', 'chat_id']
+            'chat_pointer': ['user_id', 'chat_id'],
+            'user_groups': ['user_id', 'group_name']
         }
 
         for table, columns in table_column_checks.items():
@@ -37,7 +38,7 @@ def check_database():
         return False
 
 
-# region Logs
+# region logs
 def get_log(log_id):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
@@ -85,7 +86,7 @@ def insert_log(telegram_id, request, response, response_text):
 # endregion
 
 
-# region Users
+# region users
 def insert_user(user):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD, host=database_host,
@@ -152,7 +153,7 @@ def is_user_exists(user_id):
 # endregion
 
 
-# region Chats
+# region chats
 def create_chat(name, user_id, log_ids):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
@@ -280,7 +281,7 @@ def delete_chat(chat_id):
 # endregion
 
 
-# region ChatPointers
+# region chat_pointers
 def delete_chat_pointer(user_id, chat_id):
     # Connect to the PostgreSQL database
     conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
@@ -363,4 +364,105 @@ def create_chat_pointer(user_id, chat_id):
 
     # Return the inserted chat pointer
     return inserted_chat_pointer
+
+
+# endregion
+
+
+# region user_groups
+def get_user_groups(user_id):
+    # Connect to the PostgreSQL database
+    conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
+                            host=database_host, port=database_port)
+
+    # Open a cursor to perform database operations
+    cur = conn.cursor()
+
+    # Execute SELECT statement to fetch user groups for the given user_id
+    cur.execute("SELECT * FROM user_groups WHERE user_id = %s", (user_id,))
+    rows = cur.fetchall()
+
+    # Close database connection and cursor
+    cur.close()
+    conn.close()
+
+    return rows
+
+
+def delete_user_groups(user_id):
+    # Connect to the PostgreSQL database
+    conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
+                            host=database_host, port=database_port)
+
+    # Open a cursor to perform database operations
+    cur = conn.cursor()
+
+    # Execute DELETE statement with a WHERE clause to delete the user group by user_id and group_name
+    cur.execute("DELETE FROM user_groups WHERE user_id = %s", (user_id,))
+
+    # Commit changes to the database
+    conn.commit()
+
+    # Close database connection and cursor
+    cur.close()
+    conn.close()
+
+
+def get_user_group(user_id, group_name):
+    # Connect to the PostgreSQL database
+    conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
+                            host=database_host, port=database_port)
+
+    # Open a cursor to perform database operations
+    cur = conn.cursor()
+
+    # Execute SELECT statement to fetch the user group by user_id and group_name
+    cur.execute("SELECT * FROM user_groups WHERE user_id = %s AND group_name = %s", (user_id, group_name))
+    row = cur.fetchone()
+
+    # Close database connection and cursor
+    cur.close()
+    conn.close()
+
+    return row
+
+
+def update_user_group(user_id, group_name):
+    # Connect to the PostgreSQL database
+    conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
+                            host=database_host, port=database_port)
+
+    # Open a cursor to perform database operations
+    cur = conn.cursor()
+
+    # Execute UPDATE statement to update the user group
+    cur.execute("UPDATE user_groups SET user_id = %s WHERE group_name = %s", (user_id, group_name))
+
+    # Commit changes to the database
+    conn.commit()
+
+    # Close database connection and cursor
+    # Close database connection and cursor
+    cur.close()
+    conn.close()
+
+
+def insert_user_group(user_id, group_name):
+    # Connect to the PostgreSQL database
+    conn = psycopg2.connect(database=database_name, user=DATABASE_USER, password=DATABASE_PASSWORD,
+                            host=database_host, port=database_port)
+
+    # Open a cursor to perform database operations
+    cur = conn.cursor()
+
+    # Execute INSERT statement with placeholders
+    cur.execute("INSERT INTO user_groups (user_id, group_name) VALUES (%s, %s)", (user_id, group_name))
+
+    # Commit changes to the database
+    conn.commit()
+
+    # Close database connection and cursor
+    cur.close()
+    conn.close()
+
 # endregion
