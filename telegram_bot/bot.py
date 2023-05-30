@@ -128,22 +128,28 @@ def my_profile(update, context, this_user):
 def my_timetable(update, context, this_user):
     response_message = ""
     user_groups_raw = database_client.get_user_groups(this_user.id)
-    user_groups = []
-    for group_raw in user_groups_raw:
-        user_groups.append(classes.UserGroups.from_tuple(group_raw))
-    timetables = {}
-    for user_group in user_groups:
-        timetables[user_group.group_name] = timetable_module.get_timetable(user_group.group_name)
-    for group_name, timetable in timetables.items():
-        response_message += f"Для группы <b>{group_name}</b>:\n"
-        for week_day, day_lessons_raw in timetable.items():
-            response_message += f"========================\n"
-            response_message += f"<b>{week_day}</b>\n"
-            for index, lessons_raw in enumerate(day_lessons_raw):
-                lesson = classes.Lesson.from_tuple(lessons_raw)
-                response_message += f"<b>{index + 1} {lesson.time}: {lesson.subject}</b>\n" \
-                                    f"{lesson.classroom} {lesson.teacher}\n" \
-                                    f"{lesson.additional_info}\n"
+    if len(user_groups_raw) == 0:
+        response_message += f"Не найдены группы!\n"
+    else:
+        user_groups = []
+        for group_raw in user_groups_raw:
+            user_groups.append(classes.UserGroups.from_tuple(group_raw))
+        timetables = {}
+        for user_group in user_groups:
+            timetables[user_group.group_name] = timetable_module.get_timetable(user_group.group_name)
+        for group_name, timetable in timetables.items():
+            response_message += f"Для группы <b>{group_name}</b>:\n"
+            if len(timetable) == 0:
+                response_message += f"Не найдено расписание!\n"
+            else:
+                for week_day, day_lessons_raw in timetable.items():
+                    response_message += f"========================\n"
+                    response_message += f"<b>{week_day}</b>\n"
+                    for index, lessons_raw in enumerate(day_lessons_raw):
+                        lesson = classes.Lesson.from_tuple(lessons_raw)
+                        response_message += f"<b>{index + 1} {lesson.time}: {lesson.subject}</b>\n" \
+                                            f"{lesson.classroom} {lesson.teacher}\n" \
+                                            f"{lesson.additional_info}\n"
 
     # Send the message with the functions and buttons
     context.bot.send_message(chat_id=update.message.chat_id, text=response_message, reply_markup=generate_main_keyboard(), parse_mode=ParseMode.HTML)

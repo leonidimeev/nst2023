@@ -8,19 +8,16 @@ services:
       - 80:80
     depends_on:
       - db
-    environment:
-      - POSTGRES_HOST=nst2023
-      - POSTGRES_DB=logs
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=Qwerty123!
+    env_file:
+      - .env
 
   db:
-    image: postgres
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: always
-    environment:
-      - POSTGRES_DB=nst2023
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=Qwerty123!
+    env_file:
+      - .env
     volumes:
       - db-data:/var/lib/postgresql/data
 

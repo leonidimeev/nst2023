@@ -13,7 +13,7 @@ DATABASE_PASSWORD - пароль базы данных postgres
 4. запустить bot.py
 
 ### Docker
-1. Настроить в переменной окружения: 
+1. Добавить в .env: 
 BOT_TOKEN - токен телеграм бота
 OPENAI_API_KEY - токен open ai аккаунта
 2. docker-compose up
