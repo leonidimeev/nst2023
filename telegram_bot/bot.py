@@ -184,8 +184,9 @@ def operate(update, context, this_user):
     chat_pointer = classes.ChatPointer.from_tuple(chat_pointer_raw)
     user_chat = classes.Chats.from_tuple(database_client.get_chat(chat_pointer.chat_id))
     chat_logs = []
-    for log_id in user_chat.log_ids:
-        chat_logs.append(classes.Logs.from_tuple(database_client.get_log(log_id)))
+    if user_chat.log_ids is not None:
+        for log_id in user_chat.log_ids:
+            chat_logs.append(classes.Logs.from_tuple(database_client.get_log(log_id)))
     # Генерация промта с историей
     messages = [{"role": "system", "content": "You are a helpful assistant."}]
     sorted_chat_logs = sorted(chat_logs, key=lambda chat_log: chat_log.id)
