@@ -7,8 +7,6 @@ import database_client.database_client as database_client
 import openai_client.openai_client as openai_client
 import timetable_module.timetable_module as timetable_module
 
-OPERATING_MODE = classes.OperatingMode(1)
-
 # Определение стадий (шагов) диалога add_group
 ADD_GROUP_STEP_1 = 1
 
@@ -150,6 +148,43 @@ def my_timetable(update, context, this_user):
                         response_message += f"<b>{index + 1} {lesson.time}: {lesson.subject}</b>\n" \
                                             f"{lesson.classroom} {lesson.teacher}\n" \
                                             f"{lesson.additional_info}\n"
+        if len(user_groups) > 1:
+            response_message += f"========================\n"
+            response_message += f"========================\n"
+
+    # Send the message with the functions and buttons
+    context.bot.send_message(chat_id=update.message.chat_id, text=response_message, reply_markup=generate_main_keyboard(), parse_mode=ParseMode.HTML)
+
+
+def my_presets(update, context, this_user):
+    response_message = ""
+    user_groups_raw = database_client.get_user_groups(this_user.id)
+    if len(user_groups_raw) == 0:
+        response_message += f"Не найдены группы!\n"
+    else:
+        user_groups = []
+        for group_raw in user_groups_raw:
+            user_groups.append(classes.UserGroups.from_tuple(group_raw))
+        timetables = {}
+        for user_group in user_groups:
+            timetables[user_group.group_name] = timetable_module.get_timetable(user_group.group_name)
+        for group_name, timetable in timetables.items():
+            response_message += f"Для группы <b>{group_name}</b>:\n"
+            if len(timetable) == 0:
+                response_message += f"Не найдено расписание!\n"
+
+            else:
+                for week_day, day_lessons_raw in timetable.items():
+                    response_message += f"========================\n"
+                    response_message += f"<b>{week_day}</b>\n"
+                    for index, lessons_raw in enumerate(day_lessons_raw):
+                        lesson = classes.Lesson.from_tuple(lessons_raw)
+                        response_message += f"<b>{index + 1} {lesson.time}: {lesson.subject}</b>\n" \
+                                            f"{lesson.classroom} {lesson.teacher}\n" \
+                                            f"{lesson.additional_info}\n"
+        if len(user_groups) > 1:
+            response_message += f"========================\n"
+            response_message += f"========================\n"
 
     # Send the message with the functions and buttons
     context.bot.send_message(chat_id=update.message.chat_id, text=response_message, reply_markup=generate_main_keyboard(), parse_mode=ParseMode.HTML)
@@ -189,13 +224,16 @@ def operate(update, context, this_user):
     for log_id in user_chat.log_ids:
         chat_logs.append(classes.Logs.from_tuple(database_client.get_log(log_id)))
     # Генерация промта с историей
-    messages = [{"role": "system", "content": "You are a helpful assistant."}]
+    system_message = "You are a helpful assistant. Sometimes people can tell you the big news of the day, remember it and give it to them if they ask for it" \
+                     "Main news for today: " \
+                     "Ректор Северо-Восточного федерального университета Анатолий Николаев поделился, в каких специалистах нуждается регион в ближайшее время. «Для меня Арктика — это почти два с половиной миллиона квадратных километров, где проживает около 120 тысяч человек. Арктику надо любить, какой бы она ни была», — сказал он."
+    messages = [{"role": "system", "content": system_message}]
     sorted_chat_logs = sorted(chat_logs, key=lambda chat_log: chat_log.id)
     for log in sorted_chat_logs:
         messages.append({"role": "user", "content": f"{log.request}"})
         messages.append({"role": "assistant", "content": f"{log.response_text}"})
     # Добавление вопроса
-    messages.append({"role": "assistant", "content": f"{question}"})
+    messages.append({"role": "user", "content": f"{question}"})
     response = openai_client.turbo(messages)
     response_text = response['choices'][0]['message']['content']
     context.bot.send_message(chat_id=update.message.chat_id, text=response_text)
